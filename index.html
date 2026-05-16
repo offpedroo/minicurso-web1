@@ -1,18 +1,511 @@
+```html
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portifolio Pessoal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#f0f9ff">
+    <title>Na Minha Pele - Jogo de Empatia</title>
     
-    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Quicksand:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuração do Firebase via ambiente
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        window.firebaseData = { auth, db, appId, setDoc, doc, onSnapshot };
+    </script>
+
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #f0f9ff;
+            user-select: none;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        h1, h2, h3 { font-family: 'Fredoka One', cursive; }
+
+        /* Estilos da Capa */
+        .cover-title {
+            font-size: 4rem;
+            line-height: 1;
+            background: linear-gradient(to bottom, #2563eb, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 4px 4px rgba(0,0,0,0.1));
+            animation: floatTitle 3s infinite ease-in-out;
+        }
+
+        @keyframes floatTitle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        /* Simulações */
+        .confusing-letter { display: inline-block; transition: transform 0.2s ease; }
+        .number-unstable { display: inline-block; transition: all 0.4s ease; min-width: 0.6em; }
+
+        /* Personagens */
+        .character-leo { background-color: #60a5fa; border-radius: 50%; }
+        .character-bia { background-color: #fbbf24; border-radius: 12px; transform: rotate(5deg); }
+        .character-tom { background-color: #4ade80; clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+
+        .eye { background-color: white; border-radius: 50%; width: 8px; height: 8px; position: relative; }
+        .eye::after { content: ''; background-color: black; width: 4px; height: 4px; border-radius: 50%; position: absolute; top: 2px; left: 2px; }
+
+        .shake { animation: shake 0.5s linear; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            50% { transform: translateX(8px); }
+            75% { transform: translateX(-8px); }
+        }
+
+        .overlay { background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); }
+        canvas { touch-action: none; background: #fff; cursor: crosshair; }
+        
+        .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.3s ease; }
+
+        .house-svg { width: 80px; height: 80px; margin-bottom: 15px; }
+
+        #retry-toast {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        #retry-toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .floating-element {
+            position: absolute;
+            z-index: -1;
+            opacity: 0.3;
+            animation: spin 10s infinite linear;
+        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            animation: confetti-fall 3s linear infinite;
+        }
+        @keyframes confetti-fall {
+            0% { transform: translateY(-100vh) rotate(0deg); }
+            100% { transform: translateY(100vh) rotate(360deg); }
+        }
+    </style>
 </head>
-<body>
-    <div>
-        <h1>Título do meu Postifolio</h1>
-        <h3>Autor</h3>
-        <img src="sherek.jpeg" alt="Aqui existe uma foto do sherek." width="200px" height="200px">
+<body class="flex flex-col h-screen">
+
+    <header id="game-header" class="hidden bg-white p-4 shadow-sm flex justify-between items-center z-10">
+        <h1 class="text-xl text-blue-600">Na Minha Pele</h1>
+        <div class="flex items-center space-x-4">
+            <div id="step-indicator" class="hidden text-xs font-bold text-gray-400 uppercase">Atividade 1 / 3</div>
+            <button onclick="location.reload()" class="text-gray-400 hover:text-gray-600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <main id="main-container" class="flex-grow relative flex flex-col items-center justify-center p-4">
+        
+        <!-- Elementos de Fundo -->
+        <div id="deco-elements">
+            <div class="floating-element text-blue-200 text-6xl top-10 left-10">A</div>
+            <div class="floating-element text-yellow-200 text-6xl bottom-20 right-10">5</div>
+            <div class="floating-element text-green-200 text-6xl top-1/2 left-20">✎</div>
+        </div>
+
+        <!-- Capa Inicial -->
+        <div id="screen-cover" class="text-center">
+            <h1 class="cover-title mb-2 text-blue-600">Na Minha</h1>
+            <h1 class="cover-title mb-12 text-blue-600">Pele</h1>
+            
+            <div class="flex justify-center space-x-4 mb-12">
+                <div class="character-leo w-10 h-10 flex items-center justify-center shadow-md"><div class="flex space-x-1"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="character-bia w-10 h-10 flex items-center justify-center shadow-md"><div class="flex space-x-1"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="character-tom w-10 h-10 flex items-center justify-center shadow-md"><div class="flex space-x-1"><div class="eye"></div><div class="eye"></div></div></div>
+            </div>
+
+            <button onclick="showIntro()" class="bg-blue-600 text-white px-12 py-5 rounded-3xl font-bold text-2xl shadow-[0_10px_0_0_#1d4ed8] active:shadow-none active:translate-y-[10px] transition-all">
+                Iniciar Desafio
+            </button>
+            <p id="loading-text" class="mt-8 text-gray-400 text-sm font-bold uppercase tracking-widest">A carregar dados...</p>
+        </div>
+
+        <div id="retry-toast" class="fixed top-20 bg-red-500 text-white px-6 py-2 rounded-full font-bold shadow-lg z-50 pointer-events-none">
+            Tente novamente!
+        </div>
+
+        <!-- Introdução -->
+        <div id="screen-intro" class="hidden text-center max-w-sm">
+            <div class="flex justify-center space-x-4 mb-8">
+                <div class="character-leo w-14 h-14 flex items-center justify-center shadow-lg"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="character-bia w-14 h-14 flex items-center justify-center shadow-lg"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="character-tom w-14 h-14 flex items-center justify-center shadow-lg"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+            </div>
+            <h2 class="text-2xl mb-4 text-gray-800">Sentindo o Aprendizado</h2>
+            <p class="text-gray-600 mb-8">Cada bonequinho representa um desafio real. Verás o mundo de uma forma diferente hoje.</p>
+            <button onclick="showSelect()" class="bg-blue-600 text-white w-full py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-transform">Escolher Jornada</button>
+        </div>
+
+        <!-- Seleção de Nível -->
+        <div id="screen-select" class="hidden w-full max-w-md space-y-4">
+            <h3 class="text-center text-gray-400 uppercase text-xs font-bold mb-2">Seus Desafios</h3>
+            <div onclick="startLevel('dislexia')" class="bg-white p-5 rounded-2xl shadow-md flex items-center space-x-4 cursor-pointer hover:bg-blue-50 transition-colors border-l-8 border-blue-400">
+                <div class="character-leo w-12 h-12 flex items-center justify-center flex-shrink-0"><div class="flex space-x-1"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="flex-grow">
+                    <h3 class="font-bold text-lg leading-tight">Léo (Dislexia)</h3>
+                    <p class="text-xs text-gray-500">As letras que bailam e confundem.</p>
+                </div>
+                <div class="text-blue-500 font-bold" id="prog-dislexia">0/3</div>
+            </div>
+            <div onclick="startLevel('descalculia')" class="bg-white p-5 rounded-2xl shadow-md flex items-center space-x-4 cursor-pointer hover:bg-yellow-50 transition-colors border-l-8 border-yellow-400">
+                <div class="character-bia w-12 h-12 flex items-center justify-center flex-shrink-0"><div class="flex space-x-1"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="flex-grow">
+                    <h3 class="font-bold text-lg leading-tight">Bia (Descalculia)</h3>
+                    <p class="text-xs text-gray-500">Números que perdem o seu sentido.</p>
+                </div>
+                <div class="text-yellow-500 font-bold" id="prog-descalculia">0/3</div>
+            </div>
+            <div onclick="startLevel('disgrafia')" class="bg-white p-5 rounded-2xl shadow-md flex items-center space-x-4 cursor-pointer hover:bg-green-50 transition-colors border-l-8 border-green-400">
+                <div class="character-tom w-12 h-12 flex items-center justify-center flex-shrink-0"><div class="flex space-x-1"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="flex-grow">
+                    <h3 class="font-bold text-lg leading-tight">Tom (Disgrafia)</h3>
+                    <p class="text-xs text-gray-500">O esforço para o traço sair certo.</p>
+                </div>
+                <div class="text-green-500 font-bold" id="prog-disgrafia">0/3</div>
+            </div>
+        </div>
+
+        <!-- Levels Containers (Modular) -->
+        <div id="level-dislexia" class="hidden w-full max-w-md bg-white p-6 rounded-3xl shadow-xl text-center">
+            <div class="progress-bar mb-4"><div class="progress-fill bg-blue-500" style="width: 33%"></div></div>
+            <div class="character-leo w-12 h-12 mx-auto mb-4 flex items-center justify-center shadow-md"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+            <h2 id="dislexia-title" class="text-blue-600 text-lg mb-2"></h2>
+            <p id="dislexia-desc" class="text-sm text-gray-500 mb-4"></p>
+            <div id="dislexia-visual-aid" class="flex justify-center mb-2"></div>
+            <div id="leo-text-box" class="bg-blue-50 p-6 rounded-xl text-2xl font-bold tracking-widest text-gray-700 mb-6 min-h-[120px] flex items-center justify-center flex-wrap content-center"></div>
+            <div id="dislexia-options" class="grid grid-cols-1 gap-2"></div>
+        </div>
+
+        <div id="level-descalculia" class="hidden w-full max-w-md bg-white p-6 rounded-3xl shadow-xl text-center">
+            <div class="progress-bar mb-4"><div class="progress-fill bg-yellow-500" style="width: 33%"></div></div>
+            <div class="character-bia w-12 h-12 mx-auto mb-4 flex items-center justify-center shadow-md"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+            <h2 id="descalculia-title" class="text-yellow-600 text-lg mb-2"></h2>
+            <p id="descalculia-desc" class="text-sm text-gray-500 mb-4"></p>
+            <div id="descalculia-game-area" class="bg-yellow-50 p-6 rounded-xl mb-6 min-h-[150px] flex flex-col items-center justify-center overflow-hidden"></div>
+            <div id="descalculia-options" class="grid grid-cols-1 gap-2"></div>
+        </div>
+
+        <div id="level-disgrafia" class="hidden w-full max-w-md bg-white p-6 rounded-3xl shadow-xl text-center">
+            <div class="progress-bar mb-4"><div class="progress-fill bg-green-500" style="width: 33%"></div></div>
+            <div class="character-tom w-12 h-12 mx-auto mb-4 flex items-center justify-center shadow-md"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+            <h2 id="disgrafia-title" class="text-green-600 text-lg mb-2"></h2>
+            <p id="disgrafia-desc" class="text-sm text-gray-500 mb-4"></p>
+            <div class="relative bg-gray-100 rounded-xl border-4 border-dashed border-gray-200 w-full aspect-square max-w-[280px] mx-auto mb-6 overflow-hidden">
+                <canvas id="tom-canvas" width="280" height="280"></canvas>
+            </div>
+            <button onclick="validateDisgrafia()" class="w-full bg-green-600 text-white py-4 rounded-xl font-bold shadow-lg">Concluir Atividade</button>
+        </div>
+
+        <!-- Vitória Final -->
+        <div id="screen-victory" class="hidden text-center max-w-lg p-6">
+            <div id="confetti-container"></div>
+            <h1 class="text-4xl text-blue-600 mb-4">Parabéns!</h1>
+            <h2 class="text-xl text-gray-700 mb-8">Concluíste todos os desafios.</h2>
+            
+            <div class="flex justify-center space-x-4 mb-8">
+                <div class="character-leo w-14 h-14 flex items-center justify-center shadow-lg"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="character-bia w-14 h-14 flex items-center justify-center shadow-lg"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+                <div class="character-tom w-14 h-14 flex items-center justify-center shadow-lg"><div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div></div>
+            </div>
+
+            <div class="bg-white p-8 rounded-3xl shadow-xl text-justify border-2 border-blue-100 mb-6">
+                <h3 class="text-blue-600 font-bold text-lg mb-4 text-center">A Importância do Acompanhamento</h3>
+                <p class="text-gray-600 mb-4 text-sm leading-relaxed">
+                    Sentiste apenas um pouco do esforço diário necessário para aprender com Dislexia, Descalculia ou Disgrafia. Estes transtornos não definem a inteligência, mas sim como a informação deve ser apresentada.
+                </p>
+                <p class="text-gray-600 font-bold text-sm leading-relaxed">
+                    O diagnóstico precoce e o apoio de profissionais especializados transformam barreiras em superação. Ao identificarmos cedo, damos ferramentas para que cada criança brilhe à sua maneira.
+                </p>
+            </div>
+
+            <button onclick="resetApp()" class="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">
+                Reiniciar Jornada
+            </button>
+        </div>
+
+    </main>
+
+    <div id="modal" class="hidden fixed inset-0 overlay z-50 flex items-center justify-center p-6">
+        <div class="bg-white max-w-sm w-full rounded-3xl p-8 text-center shadow-2xl">
+            <div id="modal-icon" class="w-20 h-20 mx-auto mb-6 flex items-center justify-center shadow-lg"></div>
+            <h2 id="modal-title" class="text-2xl font-bold mb-4"></h2>
+            <p id="modal-body" class="text-gray-600 mb-8 text-sm leading-relaxed"></p>
+            <button onclick="handleModalContinue()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold">Continuar</button>
+        </div>
     </div>
+
+    <script>
+        let currentType = null;
+        let subLevel = 0;
+        let intervals = [];
+        let progress = { dislexia: 0, descalculia: 0, disgrafia: 0 };
+        let drawPoints = 0;
+        let user = null;
+
+        // --- Firebase Core ---
+        async function initApp() {
+            const { auth, db, appId, signInAnonymously, onAuthStateChanged, onSnapshot, doc } = window.firebaseData;
+            
+            await signInAnonymously(auth);
+            
+            onAuthStateChanged(auth, (u) => {
+                if (u) {
+                    user = u;
+                    document.getElementById('loading-text').innerText = "Pronto para o desafio!";
+                    // Sincronizar progresso
+                    onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'progress'), (docSnap) => {
+                        if (docSnap.exists()) {
+                            progress = docSnap.data();
+                            updateProgressUI();
+                        }
+                    }, (err) => console.log("Erro ao carregar dados"));
+                }
+            });
+        }
+
+        async function saveProgress() {
+            if (!user) return;
+            const { db, appId, setDoc, doc } = window.firebaseData;
+            await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'progress'), progress);
+        }
+
+        window.onload = initApp;
+
+        // --- Navegação ---
+        function hideAll() {
+            ['cover', 'intro', 'select', 'dislexia', 'descalculia', 'disgrafia', 'victory'].forEach(s => {
+                const el = document.getElementById('screen-' + s) || document.getElementById('level-' + s);
+                if (el) el.classList.add('hidden');
+            });
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('step-indicator').classList.add('hidden');
+            document.getElementById('game-header').classList.remove('hidden');
+            document.getElementById('deco-elements').classList.add('hidden');
+            intervals.forEach(clearInterval);
+            intervals = [];
+        }
+
+        function showIntro() {
+            hideAll();
+            document.getElementById('screen-intro').classList.remove('hidden');
+        }
+
+        function showSelect() {
+            hideAll();
+            document.getElementById('screen-select').classList.remove('hidden');
+            updateProgressUI();
+            if (Object.values(progress).every(v => v === 3)) showVictory();
+        }
+
+        function updateProgressUI() {
+            ['dislexia', 'descalculia', 'disgrafia'].forEach(t => {
+                const el = document.getElementById('prog-' + t);
+                if (el) el.innerText = `${progress[t]}/3`;
+            });
+        }
+
+        function showVictory() {
+            hideAll();
+            document.getElementById('screen-victory').classList.remove('hidden');
+            document.getElementById('game-header').classList.add('hidden');
+            createConfetti();
+        }
+
+        function createConfetti() {
+            const container = document.getElementById('confetti-container');
+            container.innerHTML = '';
+            const colors = ['#3b82f6', '#fbbf24', '#4ade80', '#ef4444'];
+            for (let i = 0; i < 40; i++) {
+                const c = document.createElement('div');
+                c.className = 'confetti';
+                c.style.left = Math.random() * 100 + 'vw';
+                c.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                c.style.animationDelay = Math.random() * 2 + 's';
+                c.style.width = '10px'; c.style.height = '10px';
+                container.appendChild(c);
+            }
+        }
+
+        function resetApp() {
+            progress = { dislexia: 0, descalculia: 0, disgrafia: 0 };
+            saveProgress();
+            location.reload();
+        }
+
+        // --- Atividades ---
+        function startLevel(type) {
+            currentType = type;
+            subLevel = 0;
+            hideAll();
+            document.getElementById('level-' + type).classList.remove('hidden');
+            document.getElementById('step-indicator').classList.remove('hidden');
+            loadSubLevel();
+        }
+
+        function loadSubLevel() {
+            document.getElementById('step-indicator').innerText = `Atividade ${subLevel + 1} / 3`;
+            const fill = document.querySelector(`#level-${currentType} .progress-fill`);
+            if(fill) fill.style.width = ((subLevel + 1) / 3 * 100) + '%';
+            intervals.forEach(clearInterval);
+            intervals = [];
+            if (currentType === 'dislexia') initDislexia();
+            if (currentType === 'descalculia') initDescalculia();
+            if (currentType === 'disgrafia') initDisgrafia();
+        }
+
+        // --- Lógica Dislexia ---
+        const disData = [
+            { t: "Confusão p, b, d, q", d: "O que está escrito no cartaz?", p: "O PATO PULA NO PRATO", o: ["O Bato pula no Brato", "O Pato pula no Prato", "O Qato pula no Quato"], c: 1, i: false },
+            { t: "Inversão de Sílabas", d: "Qual é a palavra correta?", p: "ES-CO-LA", o: ["SE-CO-LA", "ES-LO-CA", "ES-CO-LA"], c: 2, i: false },
+            { t: "Imagem e Palavra", d: "Qual palavra representa a imagem?", p: "CASA", o: ["SACA", "ASAC", "CASA"], c: 2, i: true }
+        ];
+
+        function initDislexia() {
+            const data = disData[subLevel];
+            document.getElementById('dislexia-title').innerText = data.t;
+            document.getElementById('dislexia-desc').innerText = data.d;
+            const visual = document.getElementById('dislexia-visual-aid');
+            visual.innerHTML = data.i ? `<svg viewBox="0 0 100 100" class="house-svg"><path d="M10 90 L10 45 L50 15 L90 45 L90 90 Z" fill="#60a5fa"/><rect x="40" y="65" width="20" height="25" fill="#fff"/></svg>` : '';
+            const box = document.getElementById('leo-text-box');
+            box.innerHTML = '';
+            data.p.split('').forEach(char => {
+                const s = document.createElement('span'); s.innerText = char === ' ' ? '\u00A0' : char;
+                if (/[pbqdcas]/i.test(char)) s.className = 'confusing-letter';
+                box.appendChild(s);
+            });
+            intervals.push(setInterval(() => {
+                box.querySelectorAll('.confusing-letter').forEach(l => {
+                    if (Math.random() > 0.6) {
+                        if (['P', 'B', 'D', 'Q'].includes(l.innerText.toUpperCase())) l.innerText = ['P', 'B', 'D', 'Q'][Math.floor(Math.random() * 4)];
+                        l.style.transform = Math.random() > 0.5 ? 'scaleX(-1)' : 'none';
+                    }
+                });
+            }, 800));
+            const opt = document.getElementById('dislexia-options'); opt.innerHTML = '';
+            data.o.forEach((txt, idx) => {
+                const b = document.createElement('button'); b.className = "p-3 border-2 rounded-xl text-sm font-bold bg-white";
+                b.innerText = txt; b.onclick = () => validate(idx === data.c); opt.appendChild(b);
+            });
+        }
+
+        // --- Lógica Descalculia ---
+        function initDescalculia() {
+            const area = document.getElementById('descalculia-game-area');
+            const opt = document.getElementById('descalculia-options');
+            area.innerHTML = ''; opt.innerHTML = '';
+            if (subLevel === 0) {
+                document.getElementById('descalculia-title').innerText = "Troco Difícil";
+                document.getElementById('descalculia-desc').innerText = "Custo: R$ 7 | Pago: R$ 10. Quanto é o troco?";
+                area.innerHTML = `<div class="text-4xl font-black"><span class="number-unstable">10</span> <span id="op">?</span> <span class="number-unstable">7</span></div>`;
+                [{t: "R$ 3", c: true}, {t: "R$ 17", c: false}].forEach(o => createDesOpt(o.t, o.c, opt));
+                startNumAnim(['.number-unstable'], true);
+            } else if (subLevel === 1) {
+                document.getElementById('descalculia-title').innerText = "Qual é o maior?";
+                document.getElementById('descalculia-desc').innerText = "Escolha o número que representa a maior quantidade.";
+                area.innerHTML = `<div class="flex space-x-12"><div class="number-unstable text-sm" style="transform:scale(4)">3</div><div class="number-unstable text-5xl" style="transform:scale(0.3)">9</div></div>`;
+                createDesOpt("O 3", false, opt); createDesOpt("O 9", true, opt);
+                startNumAnim(['.number-unstable'], false);
+            } else {
+                document.getElementById('descalculia-title').innerText = "Contagem Instável";
+                document.getElementById('descalculia-desc').innerText = "Quantos pontos existem?";
+                for(let i=0; i<6; i++) area.innerHTML += `<div class="bg-yellow-400 w-6 h-6 rounded-full m-2 number-unstable"></div>`;
+                [4, 6, 8].forEach(n => createDesOpt(n + " pontos", n === 6, opt));
+                startNumAnim(['.number-unstable'], false);
+            }
+        }
+
+        function createDesOpt(t, c, b) {
+            const btn = document.createElement('button'); btn.className = "p-3 border-2 rounded-xl font-bold bg-white";
+            btn.innerText = t; btn.onclick = () => validate(c); b.appendChild(btn);
+        }
+
+        function startNumAnim(sel, op) {
+            intervals.push(setInterval(() => {
+                sel.forEach(s => document.querySelectorAll(s).forEach(el => {
+                    el.style.transform = `scale(${0.5 + Math.random()}) rotate(${(Math.random()-0.5)*40}deg)`;
+                }));
+                if(op && document.getElementById('op')) document.getElementById('op').innerText = Math.random() > 0.5 ? '+' : '-';
+            }, 700));
+        }
+
+        // --- Lógica Disgrafia ---
+        let canvas, ctx, isDrawing = false, lastX = 0, lastY = 0;
+        function initDisgrafia() {
+            canvas = document.getElementById('tom-canvas'); ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = '#059669'; ctx.lineWidth = 4; drawPoints = 0;
+            const getP = (e) => { const r = canvas.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; return { x: cx - r.left, y: (e.touches ? e.touches[0].clientY : e.clientY) - r.top }; };
+            const start = (e) => { isDrawing = true; const p = getP(e); lastX = p.x; lastY = p.y; };
+            const move = (e) => {
+                if (!isDrawing) return; const p = getP(e); const jX = (Math.random()-0.5)*20, jY = (Math.random()-0.5)*20;
+                ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x+jX, p.y+jY); ctx.stroke();
+                lastX = p.x+jX; lastY = p.y+jY; drawPoints++;
+            };
+            canvas.onmousedown = start; canvas.onmousemove = move; window.onmouseup = () => isDrawing = false;
+            canvas.ontouchstart = (e) => { e.preventDefault(); start(e); }; canvas.ontouchmove = (e) => { e.preventDefault(); move(e); }; canvas.ontouchend = () => isDrawing = false;
+            document.getElementById('disgrafia-title').innerText = subLevel === 0 ? "Círculo" : subLevel === 1 ? "Zig-Zag" : "Palavra LUA";
+            document.getElementById('disgrafia-desc').innerText = "O tremor cerebral dificulta o seu traço. Tente completar o desenho.";
+        }
+
+        function validateDisgrafia() { validate(drawPoints > 15); }
+
+        function validate(ok) {
+            if (ok) {
+                subLevel++;
+                if (subLevel >= 3) {
+                    progress[currentType] = 3;
+                    saveProgress();
+                    showModal(currentType);
+                } else loadSubLevel();
+            } else {
+                const t = document.getElementById('retry-toast'); t.classList.add('show');
+                setTimeout(() => t.classList.remove('show'), 1500);
+                document.getElementById('level-' + currentType).classList.add('shake');
+                setTimeout(() => document.getElementById('level-' + currentType).classList.remove('shake'), 500);
+            }
+        }
+
+        function showModal(type) {
+            hideAll(); const m = document.getElementById('modal'); m.classList.remove('hidden');
+            const icon = document.getElementById('modal-icon');
+            icon.className = `w-20 h-20 mx-auto mb-6 flex items-center justify-center shadow-lg character-${type}`;
+            icon.innerHTML = '<div class="flex space-x-2"><div class="eye"></div><div class="eye"></div></div>';
+            document.getElementById('modal-title').innerText = type === 'dislexia' ? "Sobre a Dislexia" : type === 'descalculia' ? "Sobre a Descalculia" : "Sobre a Disgrafia";
+            document.getElementById('modal-body').innerText = type === 'dislexia' ? "As letras giram e espelham. Ler torna-se uma tarefa exaustiva." : type === 'descalculia' ? "Números perdem a magnitude. Operações básicas geram grande dúvida." : "A conexão motora tem ruído. O traço não obedece ao pensamento.";
+        }
+
+        function handleModalContinue() { showSelect(); }
+    </script>
 </body>
 </html>
+
+```
